@@ -37,6 +37,7 @@ import java.awt.event.ActionListener;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 import java.io.File;
+import java.lang.reflect.InvocationTargetException;
 
 import javax.swing.JFileChooser;
 import javax.swing.JMenu;
@@ -52,6 +53,7 @@ import org.scijava.menu.MenuService;
 import org.scijava.menu.ShadowMenu;
 import org.scijava.platform.event.AppMenusCreatedEvent;
 import org.scijava.plugin.Parameter;
+import org.scijava.thread.ThreadService;
 import org.scijava.ui.AbstractUserInterface;
 import org.scijava.ui.SystemClipboard;
 import org.scijava.ui.UIService;
@@ -129,14 +131,27 @@ public abstract class AbstractSwingUI extends AbstractUserInterface implements
 		if (FileWidget.DIRECTORY_STYLE.equals(style)) {
 			chooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
 		}
-		final int rval;
-		if (FileWidget.SAVE_STYLE.equals(style)) {
-			rval = chooser.showSaveDialog(appFrame);
+		final int[] rval = new int[1];
+		try {
+			getContext().service(ThreadService.class).invoke(new Runnable() {
+				@Override
+				public void run() {
+					if (FileWidget.SAVE_STYLE.equals(style)) {
+						rval[0] = chooser.showSaveDialog(appFrame);
+					}
+					else { // default behavior
+						rval[0] = chooser.showOpenDialog(appFrame);
+					}
+				}
+			});
 		}
-		else { // default behavior
-			rval = chooser.showOpenDialog(appFrame);
+		catch (final InvocationTargetException exc) {
+			// FIXME
 		}
-		if (rval != JFileChooser.APPROVE_OPTION) return null;
+		catch (final InterruptedException exc) {
+			// FIXME
+		}
+		if (rval[0] != JFileChooser.APPROVE_OPTION) return null;
 		return chooser.getSelectedFile();
 	}
 
