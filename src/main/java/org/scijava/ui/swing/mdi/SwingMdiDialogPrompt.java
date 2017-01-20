@@ -74,11 +74,11 @@ public class SwingMdiDialogPrompt implements DialogPrompt {
 	// / Translate DialogPrompt types and results to JOptionPane types and
 	// results.
 	static final Map<DialogPrompt.MessageType, Integer> msgMap =
-		new HashMap<DialogPrompt.MessageType, Integer>();
+		new HashMap<>();
 	static final Map<DialogPrompt.OptionType, Integer> optionMap =
-		new HashMap<DialogPrompt.OptionType, Integer>();
+		new HashMap<>();
 	static final Map<Integer, DialogPrompt.Result> resultMap =
-		new HashMap<Integer, DialogPrompt.Result>();
+		new HashMap<>();
 
 	static {
 		msgMap.put(DialogPrompt.MessageType.ERROR_MESSAGE,

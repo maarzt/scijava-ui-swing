@@ -55,7 +55,7 @@ public class SwingIconService extends AbstractService implements IconService {
 	// -- instance variables --
 
 	private final HashMap<Tool, AbstractButton> buttonMap =
-		new HashMap<Tool, AbstractButton>();
+		new HashMap<>();
 
 	// -- IconService methods --
 
