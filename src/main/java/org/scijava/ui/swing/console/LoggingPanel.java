@@ -42,8 +42,11 @@ import net.miginfocom.swing.MigLayout;
 
 import org.scijava.console.OutputEvent;
 import org.scijava.console.OutputListener;
+import org.scijava.log.DefaultLogFormatter;
 import org.scijava.log.IgnoreAsCallingClass;
+import org.scijava.log.LogFormatter;
 import org.scijava.log.LogListener;
+import org.scijava.log.LogMessage;
 import org.scijava.log.LogService;
 import org.scijava.log.Logger;
 import org.scijava.thread.ThreadService;
@@ -62,7 +65,8 @@ import org.scijava.ui.swing.StaticSwingUtils;
  * @author Matthias Arzt
  */
 @IgnoreAsCallingClass
-public class LoggingPanel extends JPanel implements OutputListener
+public class LoggingPanel extends JPanel implements LogListener,
+	OutputListener
 {
 	private JTextPane textPane;
 	private JScrollPane scrollPane;
@@ -72,6 +76,8 @@ public class LoggingPanel extends JPanel implements OutputListener
 	private Style stderrLocal;
 	private Style stdoutGlobal;
 	private Style stderrGlobal;
+
+	private final LogFormatter formatter = new DefaultLogFormatter();
 
 	private final ThreadService threadService;
 
@@ -84,8 +90,22 @@ public class LoggingPanel extends JPanel implements OutputListener
 		textPane.setText("");
 	}
 
+	// -- LogListener methods --
+
+	@Override
+	public void messageLogged(LogMessage message) {
+		appendText(formatter.format(message), stdoutLocal);
+	}
+
+	// -- OutputListener methods --
+
 	@Override
 	public void outputOccurred(OutputEvent event) {
+		if(event.containsLog()) return;
+		appendText(event.getOutput(), getStyle(event));
+	}
+
+	private void appendText(final String text, final Style style) {
 		threadService.queue(new Runnable() {
 
 			@Override
@@ -93,7 +113,7 @@ public class LoggingPanel extends JPanel implements OutputListener
 				final boolean atBottom =
 						StaticSwingUtils.isScrolledToBottom(scrollPane);
 				try {
-					doc.insertString(doc.getLength(), event.getOutput(), getStyle(event));
+					doc.insertString(doc.getLength(), text, style);
 				}
 				catch (final BadLocationException exc) {
 					throw new RuntimeException(exc);
@@ -102,6 +122,8 @@ public class LoggingPanel extends JPanel implements OutputListener
 			}
 		});
 	}
+
+	// -- Helper methods --
 
 	private synchronized void initGui() {
 		setLayout(new MigLayout("inset 0", "[grow,fill]", "[grow,fill,align top]"));
@@ -138,7 +160,6 @@ public class LoggingPanel extends JPanel implements OutputListener
 
 		add(scrollPane);
 	}
-	// -- Helper methods --
 
 	private Style createStyle(final String name, final Style parent,
 							  final Color foreground, final Boolean bold, final Boolean italic)
@@ -157,7 +178,9 @@ public class LoggingPanel extends JPanel implements OutputListener
 		return contextual ? stdoutLocal : stdoutGlobal;
 	}
 
-	public JTextPane getTextPane() {
+	// -- Helper methods - testing --
+
+	JTextPane getTextPane() {
 		return textPane;
 	}
 }

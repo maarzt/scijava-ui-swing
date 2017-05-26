@@ -39,6 +39,7 @@ import net.miginfocom.swing.MigLayout;
 
 import org.scijava.Context;
 import org.scijava.console.OutputEvent;
+import org.scijava.log.LogService;
 import org.scijava.plugin.Parameter;
 import org.scijava.thread.ThreadService;
 import org.scijava.ui.console.AbstractConsolePane;
@@ -53,6 +54,9 @@ public class SwingConsolePane extends AbstractConsolePane<JPanel> {
 
 	@Parameter
 	private ThreadService threadService;
+
+	@Parameter
+	private LogService logService;
 
 	private LoggingPanel loggingPanel;
 
@@ -121,6 +125,7 @@ public class SwingConsolePane extends AbstractConsolePane<JPanel> {
 	private synchronized void initLoggingPanel() {
 		if (loggingPanel != null) return;
 		loggingPanel = new LoggingPanel(threadService);
+		logService.addListener(loggingPanel);
 		component = new JPanel(new MigLayout("", "[grow]", "[grow]"));
 		component.add(loggingPanel, "grow");
 	}
