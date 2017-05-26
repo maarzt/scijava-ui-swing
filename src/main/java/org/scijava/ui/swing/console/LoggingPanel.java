@@ -31,6 +31,7 @@
 package org.scijava.ui.swing.console;
 
 import java.awt.*;
+import java.util.function.Predicate;
 
 import javax.swing.*;
 import javax.swing.text.AttributeSet;
@@ -85,12 +86,14 @@ public class LoggingPanel extends JPanel implements LogListener,
 	private static final AttributeSet stdoutGlobal = italic(Color.black);
 	private static final AttributeSet stderrGlobal = italic(Color.red);
 
+	private final TextFilterField textFilter = new TextFilterField(" Text Search (Alt-F)");
 	private JTextPane textPane;
 	private JScrollPane scrollPane;
 
 	private StyledDocument doc;
 
 	private final LogFormatter formatter = new DefaultLogFormatter();
+	private Predicate<String> filter = text -> true;
 
 	private final ThreadService threadService;
 
@@ -119,6 +122,8 @@ public class LoggingPanel extends JPanel implements LogListener,
 	}
 
 	private void appendText(final String text, final AttributeSet style) {
+		if(!filter.test(text)) return;
+
 		threadService.queue(new Runnable() {
 
 			@Override
@@ -138,8 +143,12 @@ public class LoggingPanel extends JPanel implements LogListener,
 
 	// -- Helper methods --
 
-	private synchronized void initGui() {
-		setLayout(new MigLayout("inset 0", "[grow,fill]", "[grow,fill,align top]"));
+	private void initGui() {
+
+		setLayout(new MigLayout("insets 0", "[grow]", "[][grow]"));
+
+		textFilter.setChangeListener(this::updateFilter);
+		add(textFilter.getComponent(), "grow, wrap");
 
 		textPane = new JTextPane();
 		textPane.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
@@ -166,7 +175,11 @@ public class LoggingPanel extends JPanel implements LogListener,
 		scrollPane.getHorizontalScrollBar().setUnitIncrement(charWidth);
 		scrollPane.getVerticalScrollBar().setUnitIncrement(2 * lineHeight);
 
-		add(scrollPane);
+		add(scrollPane, "grow");
+	}
+
+	private void updateFilter() {
+		filter = textFilter.getFilter();
 	}
 
 	private AttributeSet getStyle(final OutputEvent event) {
