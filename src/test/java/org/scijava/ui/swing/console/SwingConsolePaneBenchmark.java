@@ -59,8 +59,7 @@ public class SwingConsolePaneBenchmark {
 		final Context context = new Context();
 		context.service(UIService.class).showUI();
 
-		System.out.print("Hello ");
-		System.err.println("world!");
+		System.out.println("Hello world!");
 
 		final int numThreads = 50;
 		final int numOperations = 20;
@@ -99,8 +98,7 @@ public class SwingConsolePaneBenchmark {
 			f[t].get();
 		}
 
-		System.err.print("Goodbye ");
-		System.out.println("cruel world!");
+		System.err.println("Goodbye cruel world!");
 
 		final long end = System.currentTimeMillis();
 		System.out.println();
