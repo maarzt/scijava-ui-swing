@@ -31,19 +31,23 @@
 package org.scijava.ui.swing.console;
 
 import java.awt.*;
+import java.io.PrintStream;
+import java.util.HashSet;
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Predicate;
+import java.util.stream.Stream;
 
 import javax.swing.*;
 import javax.swing.text.AttributeSet;
-import javax.swing.text.BadLocationException;
 import javax.swing.text.MutableAttributeSet;
 import javax.swing.text.SimpleAttributeSet;
-import javax.swing.text.Style;
 import javax.swing.text.StyleConstants;
-import javax.swing.text.StyledDocument;
 
 import net.miginfocom.swing.MigLayout;
 
+import org.scijava.Context;
 import org.scijava.console.OutputEvent;
 import org.scijava.console.OutputListener;
 import org.scijava.log.DefaultLogFormatter;
@@ -52,20 +56,23 @@ import org.scijava.log.LogFormatter;
 import org.scijava.log.LogLevel;
 import org.scijava.log.LogListener;
 import org.scijava.log.LogMessage;
+import org.scijava.log.LogRecorder;
 import org.scijava.log.LogService;
+import org.scijava.log.LogSource;
 import org.scijava.log.Logger;
 import org.scijava.thread.ThreadService;
-import org.scijava.ui.swing.StaticSwingUtils;
 
 /**
- * LoggingPanel can display log message and console output as a list, and
- * provides convenient ways for the user to filter this list.
- * LoggingPanel implements {@link LogListener} and {@link OutputListener}, that
- * way it can receive log message and console output from {@link LogService},
- * {@link Logger} and {@link org.scijava.console.ConsoleService}
+ * {@link LoggingPanel} can display log message and console output as a list,
+ * and provides convenient ways for the user to filter this list. LoggingPanel
+ * implements {@link LogListener} and {@link OutputListener}, that way it can
+ * receive log message and console output from {@link LogService},
+ * {@link org.scijava.log.ListenableLogger} and
+ * {@link org.scijava.console.ConsoleService}
  *
  * @see LogService
  * @see Logger
+ * @see org.scijava.log.ListenableLogger
  * @see org.scijava.console.ConsoleService
  * @author Matthias Arzt
  */
@@ -73,6 +80,7 @@ import org.scijava.ui.swing.StaticSwingUtils;
 public class LoggingPanel extends JPanel implements LogListener,
 	OutputListener
 {
+
 	private static final AttributeSet DEFAULT_STYLE = new SimpleAttributeSet();
 	private static final AttributeSet STYLE_ERROR = normal(new Color(200, 0, 0));
 	private static final AttributeSet STYLE_WARN = normal(new Color(200, 140, 0));
@@ -81,112 +89,107 @@ public class LoggingPanel extends JPanel implements LogListener,
 	private static final AttributeSet STYLE_TRACE = normal(Color.GRAY);
 	private static final AttributeSet STYLE_OTHERS = normal(Color.GRAY);
 
-	private static final AttributeSet stdoutLocal = normal(Color.black);
-	private static final AttributeSet stderrLocal = normal(Color.red);
-	private static final AttributeSet stdoutGlobal = italic(Color.black);
-	private static final AttributeSet stderrGlobal = italic(Color.red);
+	private final TextFilterField textFilter =
+		new TextFilterField(" Text Search (Alt-F)");
+	private final ItemTextPane textArea;
 
-	private final TextFilterField textFilter = new TextFilterField(" Text Search (Alt-F)");
-	private JTextPane textPane;
-	private JScrollPane scrollPane;
+	private final LogFormatter logFormatter = new DefaultLogFormatter();
+	private final Map<String, AttributeSet> streamStyles =
+		new ConcurrentHashMap<>();
 
-	private StyledDocument doc;
+	private LogRecorder recorder;
 
-	private final LogFormatter formatter = new DefaultLogFormatter();
-	private Predicate<String> filter = text -> true;
+	// -- constructor --
 
-	private final ThreadService threadService;
+	public LoggingPanel(Context context) {
+		this(context.getService(ThreadService.class));
+	}
 
 	public LoggingPanel(ThreadService threadService) {
-		this.threadService = threadService;
+		textArea = new ItemTextPane(threadService);
 		initGui();
+		setPrintStreamStyle(LogRecorder.STDOUT_TAG, normal(Color.black));
+		setPrintStreamStyle(LogRecorder.STDERR_TAG, normal(Color.red));
+		setPrintStreamStyle(LogRecorder.GLOBAL_STDOUT_TAG, italic(Color.black));
+		setPrintStreamStyle(LogRecorder.GLOBAL_STDERR_TAG, italic(Color.red));
+		setRecorder(new LogRecorder());
+	}
+
+	// --- LoggingPanel methods --
+
+	public void setRecorder(LogRecorder recorder) {
+		if (recorder != null) recorder.removeObserver(textArea::update);
+		this.recorder = recorder;
+		updateFilter();
+		recorder.addObservers(textArea::update);
 	}
 
 	public void clear() {
-		textPane.setText("");
+		recorder.clear();
+		updateFilter();
+	}
+
+	public PrintStream printStream(String tag) {
+		return recorder.printStream(tag);
+	}
+
+	public void setPrintStreamStyle(String tag, AttributeSet style) {
+		streamStyles.put(tag, style);
 	}
 
 	// -- LogListener methods --
 
 	@Override
 	public void messageLogged(LogMessage message) {
-		appendText(formatter.format(message), getLevelStyle(message.level()));
+		recorder.messageLogged(message);
 	}
 
 	// -- OutputListener methods --
 
 	@Override
 	public void outputOccurred(OutputEvent event) {
-		if(event.containsLog()) return;
-		appendText(event.getOutput(), getStyle(event));
-	}
-
-	private void appendText(final String text, final AttributeSet style) {
-		if(!filter.test(text)) return;
-
-		threadService.queue(new Runnable() {
-
-			@Override
-			public void run() {
-				final boolean atBottom =
-						StaticSwingUtils.isScrolledToBottom(scrollPane);
-				try {
-					doc.insertString(doc.getLength(), text, style);
-				}
-				catch (final BadLocationException exc) {
-					throw new RuntimeException(exc);
-				}
-				if (atBottom) StaticSwingUtils.scrollToBottom(scrollPane);
-			}
-		});
+		recorder.outputOccurred(event);
 	}
 
 	// -- Helper methods --
 
 	private void initGui() {
-
-		setLayout(new MigLayout("insets 0", "[grow]", "[][grow]"));
-
 		textFilter.setChangeListener(this::updateFilter);
-		add(textFilter.getComponent(), "grow, wrap");
 
-		textPane = new JTextPane();
-		textPane.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
-		textPane.setEditable(false);
+		textArea.getJComponent().setPreferredSize(new Dimension(200, 100));
 
-		doc = textPane.getStyledDocument();
-
-		// NB: We wrap the JTextPane in a JPanel to disable
-		// the text pane's intelligent line wrapping behavior.
-		// I.e.: we want console lines _not_ to wrap, but instead
-		// for the scroll pane to show a horizontal scroll bar.
-		// Thanks to: https://tips4java.wordpress.com/2009/01/25/no-wrap-text-pane/
-		final JPanel textPanel = new JPanel();
-		textPanel.setLayout(new BorderLayout());
-		textPanel.add(textPane);
-
-		scrollPane = new JScrollPane(textPanel);
-		scrollPane.setPreferredSize(new Dimension(600, 600));
-
-		// Make the scroll bars move at a reasonable pace.
-		final FontMetrics fm = scrollPane.getFontMetrics(scrollPane.getFont());
-		final int charWidth = fm.charWidth('a');
-		final int lineHeight = fm.getHeight();
-		scrollPane.getHorizontalScrollBar().setUnitIncrement(charWidth);
-		scrollPane.getVerticalScrollBar().setUnitIncrement(2 * lineHeight);
-
-		add(scrollPane, "grow");
+		this.setLayout(new MigLayout("insets 0", "[grow]", "[][grow]"));
+		this.add(textFilter.getComponent(), "grow, wrap");
+		this.add(textArea.getJComponent(), "grow");
 	}
 
 	private void updateFilter() {
-		filter = textFilter.getFilter();
+		final Predicate<String> quickSearchFilter = textFilter.getFilter();
+		Stream<ItemTextPane.Item> stream = recorder.stream().map(this::wrapToItem)
+			.filter(item -> quickSearchFilter.test(item.text()));
+		textArea.setData(stream.iterator());
 	}
 
-	private AttributeSet getStyle(final OutputEvent event) {
-		final boolean stderr = event.getSource() == OutputEvent.Source.STDERR;
-		final boolean contextual = event.isContextual();
-		if (stderr) return contextual ? stderrLocal : stderrGlobal;
-		return contextual ? stdoutLocal : stdoutGlobal;
+	private ItemTextPane.Item wrapToItem(Object o) {
+		if (o instanceof LogMessage)
+			return wrapLogMessage((LogMessage) o);
+		if (o instanceof LogRecorder.TaggedLine)
+			return wrapStreamItem((LogRecorder.TaggedLine) o);
+		throw new IllegalStateException();
+	}
+
+	private ItemTextPane.Item wrapLogMessage(LogMessage message) {
+		return new ItemTextPane.Item(getLevelStyle(message.level()),
+			logFormatter.format(message), null, true);
+	}
+
+	private ItemTextPane.Item wrapStreamItem(LogRecorder.TaggedLine item) {
+		return new ItemTextPane.Item(streamStyles.getOrDefault(item.tag(),
+			DEFAULT_STYLE), appendLn(item.line()), item.tag(), item.isComplete());
+	}
+
+	private static String appendLn(String text) {
+		return text.endsWith("\n") ? text : text + "\n";
 	}
 
 	private static AttributeSet getLevelStyle(int i) {
@@ -221,6 +224,6 @@ public class LoggingPanel extends JPanel implements LogListener,
 	// -- Helper methods - testing --
 
 	JTextPane getTextPane() {
-		return textPane;
+		return textArea.getTextPane();
 	}
 }
