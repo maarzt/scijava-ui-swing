@@ -33,7 +33,10 @@ package org.scijava.ui.swing.console;
 import java.awt.*;
 
 import javax.swing.*;
+import javax.swing.text.AttributeSet;
 import javax.swing.text.BadLocationException;
+import javax.swing.text.MutableAttributeSet;
+import javax.swing.text.SimpleAttributeSet;
 import javax.swing.text.Style;
 import javax.swing.text.StyleConstants;
 import javax.swing.text.StyledDocument;
@@ -45,6 +48,7 @@ import org.scijava.console.OutputListener;
 import org.scijava.log.DefaultLogFormatter;
 import org.scijava.log.IgnoreAsCallingClass;
 import org.scijava.log.LogFormatter;
+import org.scijava.log.LogLevel;
 import org.scijava.log.LogListener;
 import org.scijava.log.LogMessage;
 import org.scijava.log.LogService;
@@ -68,14 +72,23 @@ import org.scijava.ui.swing.StaticSwingUtils;
 public class LoggingPanel extends JPanel implements LogListener,
 	OutputListener
 {
+	private static final AttributeSet DEFAULT_STYLE = new SimpleAttributeSet();
+	private static final AttributeSet STYLE_ERROR = normal(new Color(200, 0, 0));
+	private static final AttributeSet STYLE_WARN = normal(new Color(200, 140, 0));
+	private static final AttributeSet STYLE_INFO = normal(Color.BLACK);
+	private static final AttributeSet STYLE_DEBUG = normal(new Color(0, 0, 200));
+	private static final AttributeSet STYLE_TRACE = normal(Color.GRAY);
+	private static final AttributeSet STYLE_OTHERS = normal(Color.GRAY);
+
+	private static final AttributeSet stdoutLocal = normal(Color.black);
+	private static final AttributeSet stderrLocal = normal(Color.red);
+	private static final AttributeSet stdoutGlobal = italic(Color.black);
+	private static final AttributeSet stderrGlobal = italic(Color.red);
+
 	private JTextPane textPane;
 	private JScrollPane scrollPane;
 
 	private StyledDocument doc;
-	private Style stdoutLocal;
-	private Style stderrLocal;
-	private Style stdoutGlobal;
-	private Style stderrGlobal;
 
 	private final LogFormatter formatter = new DefaultLogFormatter();
 
@@ -94,7 +107,7 @@ public class LoggingPanel extends JPanel implements LogListener,
 
 	@Override
 	public void messageLogged(LogMessage message) {
-		appendText(formatter.format(message), stdoutLocal);
+		appendText(formatter.format(message), getLevelStyle(message.level()));
 	}
 
 	// -- OutputListener methods --
@@ -105,7 +118,7 @@ public class LoggingPanel extends JPanel implements LogListener,
 		appendText(event.getOutput(), getStyle(event));
 	}
 
-	private void appendText(final String text, final Style style) {
+	private void appendText(final String text, final AttributeSet style) {
 		threadService.queue(new Runnable() {
 
 			@Override
@@ -134,11 +147,6 @@ public class LoggingPanel extends JPanel implements LogListener,
 
 		doc = textPane.getStyledDocument();
 
-		stdoutLocal = createStyle("stdoutLocal", null, Color.black, null, null);
-		stderrLocal = createStyle("stderrLocal", null, Color.red, null, null);
-		stdoutGlobal = createStyle("stdoutGlobal", stdoutLocal, null, null, true);
-		stderrGlobal = createStyle("stderrGlobal", stderrLocal, null, null, true);
-
 		// NB: We wrap the JTextPane in a JPanel to disable
 		// the text pane's intelligent line wrapping behavior.
 		// I.e.: we want console lines _not_ to wrap, but instead
@@ -161,21 +169,40 @@ public class LoggingPanel extends JPanel implements LogListener,
 		add(scrollPane);
 	}
 
-	private Style createStyle(final String name, final Style parent,
-							  final Color foreground, final Boolean bold, final Boolean italic)
-	{
-		final Style style = textPane.addStyle(name, parent);
-		if (foreground != null) StyleConstants.setForeground(style, foreground);
-		if (bold != null) StyleConstants.setBold(style, bold);
-		if (italic != null) StyleConstants.setItalic(style, italic);
-		return style;
-	}
-
-	private Style getStyle(final OutputEvent event) {
+	private AttributeSet getStyle(final OutputEvent event) {
 		final boolean stderr = event.getSource() == OutputEvent.Source.STDERR;
 		final boolean contextual = event.isContextual();
 		if (stderr) return contextual ? stderrLocal : stderrGlobal;
 		return contextual ? stdoutLocal : stdoutGlobal;
+	}
+
+	private static AttributeSet getLevelStyle(int i) {
+		switch (i) {
+			case LogLevel.ERROR:
+				return STYLE_ERROR;
+			case LogLevel.WARN:
+				return STYLE_WARN;
+			case LogLevel.INFO:
+				return STYLE_INFO;
+			case LogLevel.DEBUG:
+				return STYLE_DEBUG;
+			case LogLevel.TRACE:
+				return STYLE_TRACE;
+			default:
+				return STYLE_OTHERS;
+		}
+	}
+
+	private static MutableAttributeSet normal(Color color) {
+		MutableAttributeSet style = new SimpleAttributeSet();
+		StyleConstants.setForeground(style, color);
+		return style;
+	}
+
+	private static MutableAttributeSet italic(Color color) {
+		MutableAttributeSet style = normal(color);
+		StyleConstants.setItalic(style, true);
+		return style;
 	}
 
 	// -- Helper methods - testing --
