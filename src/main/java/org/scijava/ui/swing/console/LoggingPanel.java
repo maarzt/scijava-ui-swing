@@ -33,10 +33,12 @@ package org.scijava.ui.swing.console;
 import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.io.PrintStream;
-import java.util.HashSet;
+import java.util.Collections;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.stream.Stream;
 
@@ -93,10 +95,16 @@ public class LoggingPanel extends JPanel implements LogListener,
 
 	private final TextFilterField textFilter =
 		new TextFilterField(" Text Search (Alt-F)");
+	private final LogSourcesPanel sourcesPanel = initSourcesPanel();
+
 	private final ItemTextPane textArea;
 
 	private final JPanel textFilterPanel = new JPanel();
+	private final JSplitPane splitPane =
+		new JSplitPane(JSplitPane.HORIZONTAL_SPLIT);
 
+	private final Set<LogSource> sources = Collections.newSetFromMap(
+		new ConcurrentHashMap<>());
 	private final LogFormatter logFormatter = new DefaultLogFormatter();
 	private final Map<String, AttributeSet> streamStyles =
 		new ConcurrentHashMap<>();
@@ -128,6 +136,18 @@ public class LoggingPanel extends JPanel implements LogListener,
 		recorder.addObservers(textArea::update);
 	}
 
+	public void toggleSourcesPanel() {
+		boolean visible = !sourcesPanel.isVisible();
+		setSourcesPanelVisible(visible);
+	}
+
+	public void setSourcesPanelVisible(boolean visible) {
+		sourcesPanel.setVisible(visible);
+		if (visible) reloadSources();
+		splitPane.resetToPreferredSizes();
+		splitPane.setDividerSize(visible ? 5 : 0);
+	}
+
 	public void setTextFilterVisible(boolean visible) {
 		textFilterPanel.setVisible(visible);
 	}
@@ -157,6 +177,7 @@ public class LoggingPanel extends JPanel implements LogListener,
 
 	@Override
 	public void messageLogged(LogMessage message) {
+		sources.add(message.source());
 		recorder.messageLogged(message);
 	}
 
@@ -182,14 +203,34 @@ public class LoggingPanel extends JPanel implements LogListener,
 		textFilterPanel.add(menuButton);
 		textFilterPanel.add(textFilter.getComponent(), "grow");
 
+		sourcesPanel.setChangeListener(this::updateFilter);
+		sourcesPanel.setVisible(false);
+
 		textArea.setPopupMenu(menu);
 		textArea.getJComponent().setPreferredSize(new Dimension(200, 100));
 
+		splitPane.setBorder(BorderFactory.createEmptyBorder(1, 1, 1, 1));
+		splitPane.setResizeWeight(0.15);
+		splitPane.add(sourcesPanel);
+		splitPane.add(textArea.getJComponent());
+		splitPane.setDividerSize(0);
+		splitPane.resetToPreferredSizes();
+
 		this.setLayout(new MigLayout("insets 0", "[grow]", "[][grow]"));
 		this.add(textFilterPanel, "grow, wrap");
-		this.add(textArea.getJComponent(), "grow");
+		this.add(splitPane, "grow");
 
 		registerKeyStroke("alt F", "focusTextFilter", this::focusTextFilter);
+	}
+
+	private LogSourcesPanel initSourcesPanel() {
+		JButton reloadButton = new JButton("reload");
+		reloadButton.addActionListener(actionEvent -> reloadSources());
+		return new LogSourcesPanel(reloadButton);
+	}
+
+	private void reloadSources() {
+		sourcesPanel.updateSources(sources);
 	}
 
 	private void registerKeyStroke(String keyStroke, String id, final Runnable action) {
@@ -214,6 +255,8 @@ public class LoggingPanel extends JPanel implements LogListener,
 			this::clear));
 		registerKeyStroke("alt C", "clearLoggingPanel",
 			this::clear);
+		menu.add(newMenuItem("Log Sources",
+			this::toggleSourcesPanel));
 		return menu;
 	}
 
@@ -233,8 +276,18 @@ public class LoggingPanel extends JPanel implements LogListener,
 
 	private void updateFilter() {
 		final Predicate<String> quickSearchFilter = textFilter.getFilter();
-		Stream<ItemTextPane.Item> stream = recorder.stream().map(this::wrapToItem)
-			.filter(item -> quickSearchFilter.test(item.text()));
+		final Predicate<LogMessage> logLevelFilter = sourcesPanel.getFilter();
+		Function<Object, ItemTextPane.Item> filter = object -> {
+			if (object instanceof LogMessage) {
+				LogMessage logMessage = (LogMessage) object;
+				if (!logLevelFilter.test(logMessage)) return null;
+			}
+			ItemTextPane.Item item = wrapToItem(object);
+			if (!quickSearchFilter.test(item.text())) return null;
+			return item;
+		};
+		Stream<ItemTextPane.Item> stream =
+			recorder.stream().map(filter).filter(Objects::nonNull);
 		textArea.setData(stream.iterator());
 	}
 
