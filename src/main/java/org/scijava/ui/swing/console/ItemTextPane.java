@@ -94,6 +94,10 @@ class ItemTextPane {
 		return scrollPane;
 	}
 
+	public void setPopupMenu(JPopupMenu menu) {
+		textPane.setComponentPopupMenu(menu);
+	}
+
 	/**
 	 * Set the {@link ItemTextPane.Item}s to be displayed in the
 	 * {@link JTextPane}.
