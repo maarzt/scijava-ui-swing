@@ -56,7 +56,6 @@ import org.scijava.console.OutputEvent;
 import org.scijava.console.OutputListener;
 import org.scijava.log.DefaultLogFormatter;
 import org.scijava.log.IgnoreAsCallingClass;
-import org.scijava.log.LogFormatter;
 import org.scijava.log.LogLevel;
 import org.scijava.log.LogListener;
 import org.scijava.log.LogMessage;
@@ -105,7 +104,7 @@ public class LoggingPanel extends JPanel implements LogListener,
 
 	private final Set<LogSource> sources = Collections.newSetFromMap(
 		new ConcurrentHashMap<>());
-	private final LogFormatter logFormatter = new DefaultLogFormatter();
+	private final DefaultLogFormatter logFormatter = new DefaultLogFormatter();
 	private final Map<String, AttributeSet> streamStyles =
 		new ConcurrentHashMap<>();
 
@@ -257,7 +256,42 @@ public class LoggingPanel extends JPanel implements LogListener,
 			this::clear);
 		menu.add(newMenuItem("Log Sources",
 			this::toggleSourcesPanel));
+		menu.add(newMenuItem("update", this::updateFilter));
+		menu.add(initSettingsMenu());
 		return menu;
+	}
+
+	private JMenu initSettingsMenu() {
+		JMenu menu = new JMenu("Settings");
+		menu.add(newMenuItem("switch recording of calling class on/of",
+			this::recordCallingClassSetter));
+		menu.add(newMenuItem("show / hide time stamp",
+			toggleLogFormatterFieldVisible(DefaultLogFormatter.Field.TIME)));
+		menu.add(newMenuItem("show / hide log source",
+			toggleLogFormatterFieldVisible(DefaultLogFormatter.Field.SOURCE)));
+		menu.add(newMenuItem("show / hide log level",
+			toggleLogFormatterFieldVisible(DefaultLogFormatter.Field.LEVEL)));
+		menu.add(newMenuItem("show / hide exception",
+			toggleLogFormatterFieldVisible(DefaultLogFormatter.Field.THROWABLE)));
+		menu.add(newMenuItem("show / hide attached data",
+			toggleLogFormatterFieldVisible(DefaultLogFormatter.Field.ATTACHMENT)));
+		return menu;
+	}
+
+	private void recordCallingClassSetter() {
+		if (recorder != null) {
+			boolean enable = !recorder.isRecordCallingClass();
+			recorder.setRecordCallingClass(enable);
+			if (enable)
+				logFormatter.setVisible(DefaultLogFormatter.Field.ATTACHMENT, true);
+		}
+	}
+
+	private Runnable toggleLogFormatterFieldVisible(DefaultLogFormatter.Field item) {
+		return () -> {
+			logFormatter.setVisible(item, !logFormatter.isVisible(item));
+			updateFilter();
+		};
 	}
 
 	static private JMenuItem newMenuItem(String text, String keyStroke,
