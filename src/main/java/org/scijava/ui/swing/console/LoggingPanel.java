@@ -54,7 +54,6 @@ import net.miginfocom.swing.MigLayout;
 import org.scijava.Context;
 import org.scijava.console.OutputEvent;
 import org.scijava.console.OutputListener;
-import org.scijava.log.DefaultLogFormatter;
 import org.scijava.log.IgnoreAsCallingClass;
 import org.scijava.log.LogLevel;
 import org.scijava.log.LogListener;
@@ -70,12 +69,11 @@ import org.scijava.thread.ThreadService;
  * and provides convenient ways for the user to filter this list. LoggingPanel
  * implements {@link LogListener} and {@link OutputListener}, that way it can
  * receive log message and console output from {@link LogService},
- * {@link org.scijava.log.ListenableLogger} and
+ * {@link Logger} and
  * {@link org.scijava.console.ConsoleService}
  *
  * @see LogService
  * @see Logger
- * @see org.scijava.log.ListenableLogger
  * @see org.scijava.console.ConsoleService
  * @author Matthias Arzt
  */

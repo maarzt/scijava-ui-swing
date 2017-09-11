@@ -73,6 +73,7 @@ class LogSourcesPanel extends JPanel {
 	private final Map<LogSource, Item> sourceItems = new HashMap<>();
 	private JTree tree;
 	private DefaultTreeModel treeModel;
+	private DefaultMutableTreeNode rootNode = new DefaultMutableTreeNode("Log Sources:");
 
 	private Predicate<LogMessage> filter = message -> true;
 	private Runnable changeListener = null;
@@ -111,9 +112,9 @@ class LogSourcesPanel extends JPanel {
 	// -- Helper methods --
 
 	private void initTreeView() {
-		DefaultMutableTreeNode root = getItem(LogSource.root()).node;
-		treeModel = new DefaultTreeModel(root);
+		treeModel = new DefaultTreeModel(rootNode);
 		tree = new JTree(treeModel);
+		tree.setRootVisible(false);
 		DefaultTreeCellRenderer cellRenderer = new DefaultTreeCellRenderer();
 		cellRenderer.setIcon(null);
 		cellRenderer.setLeafIcon(null);
@@ -215,10 +216,9 @@ class LogSourcesPanel extends JPanel {
 	private Item initItem(LogSource source) {
 		Item item = new Item(source);
 		sourceItems.put(item.source, item);
-		if (!source.isRoot()) {
-			DefaultMutableTreeNode parent = getItem(source.parent()).node;
-			parent.add(item.node);
-		}
+		DefaultMutableTreeNode parent = source.isRoot() ?
+				rootNode : getItem(source.parent()).node;
+		parent.add(item.node);
 		return item;
 	}
 
@@ -302,9 +302,11 @@ class LogSourcesPanel extends JPanel {
 	public static void main(String... args) {
 		JFrame frame = new JFrame();
 		LogSourcesPanel logLevelPanel = new LogSourcesPanel(new JButton("dummy"));
-		Set<LogSource> loggers = new HashSet<>(Arrays.asList(LogSource.parse(
-			"Hello:World"), LogSource.parse("Hello:Universe"), LogSource.parse(
-				"Hello:foo:bar")));
+		LogSource root = LogSource.newRoot();
+		Set<LogSource> loggers = new HashSet<>(Arrays.asList(
+				root.subSourceFromString("Hello:World"),
+				root.subSourceFromString("Hello:Universe"),
+				root.subSourceFromString("Hello:foo:bar")));
 		logLevelPanel.updateSources(loggers);
 		frame.getContentPane().add(logLevelPanel, BorderLayout.CENTER);
 		frame.pack();
