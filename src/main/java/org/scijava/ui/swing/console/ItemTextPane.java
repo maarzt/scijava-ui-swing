@@ -30,19 +30,18 @@
 
 package org.scijava.ui.swing.console;
 
-import java.awt.*;
+import java.awt.Font;
+import java.util.ArrayList;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.Iterator;
-import java.util.Map;
+import java.util.List;
 import java.util.Objects;
+import java.util.function.Predicate;
 
 import javax.swing.*;
 import javax.swing.text.AttributeSet;
 import javax.swing.text.BadLocationException;
 import javax.swing.text.DefaultStyledDocument;
-import javax.swing.text.Position;
-import javax.swing.text.SimpleAttributeSet;
 import javax.swing.text.StyledDocument;
 
 import org.scijava.thread.ThreadService;
@@ -169,14 +168,10 @@ class ItemTextPane {
 
 		private final String text;
 		private final AttributeSet style;
-		private final Object tag;
-		private final boolean complete;
 
-		Item(AttributeSet style, String text, Object tag, boolean complete) {
+		Item(AttributeSet style, String text) {
 			this.style = style;
 			this.text = text;
-			this.tag = tag;
-			this.complete = complete;
 		}
 
 		final String text() {
@@ -185,14 +180,6 @@ class ItemTextPane {
 
 		final AttributeSet style() {
 			return style;
-		}
-
-		final Object tag() {
-			return tag;
-		}
-
-		final boolean isComplete() {
-			return complete;
 		}
 	}
 
@@ -208,18 +195,19 @@ class ItemTextPane {
 
 		private final Iterator<Item> data;
 
-		private final Map<Object, Marking> markings = new HashMap<>();
-
-		private final Map<Color, SimpleAttributeSet> attributesMap =
-			new HashMap<>();
-
 		private final StyledDocument document = new DefaultStyledDocument();
 
 		private boolean canceled = false;
 
+		private Predicate<String> filter = ignore -> true;
+
+		private int temporaryLineLength;
+
 		DocumentCalculator(Iterator<Item> data) {
 			this.data = data;
 		}
+
+		private List<Item> line = new ArrayList<>();
 
 		public StyledDocument document() {
 			return document;
@@ -233,59 +221,64 @@ class ItemTextPane {
 			canceled = true;
 		}
 
-		/**
-		 * Read {@link Item}s from the previously given {@link Iterator} and append
-		 * them to the document.
-		 */
-		public void update() {
+		public void setFilter(Predicate<String> filter) {
+			this.filter = filter;
+		}
+
+		public synchronized void update() {
+			removeTemporaryLine();
 			while (data.hasNext() && !canceled) {
-				processItem(data.next());
-			}
-		}
-
-		private void processItem(Item item) {
-			try {
-				if (item.tag() != null) {
-					Marking marking =
-						markings.computeIfAbsent(item.tag(), k -> new Marking());
-					marking.removeText(document);
-					int start = addText(item);
-					if (!item.isComplete())
-						marking.markText(document, start, item.text().length());
+				Item item = data.next();
+				line.add(item);
+				if(item.text().endsWith("\n")) {
+					flushLine();
 				}
-				else addText(item);
 			}
-			catch (BadLocationException e) {
-				e.printStackTrace();
+			if(!line.isEmpty())
+				flushTemporaryLine();
+		}
+
+		private void flushLine() {
+			if(filter.test(getLineText()))
+				addLine();
+			line.clear();
+		}
+
+		private void flushTemporaryLine() {
+			String text = getLineText();
+			if(filter.test(text)) {
+				temporaryLineLength = text.length();
+				addLine();
 			}
 		}
 
-		private int addText(Item item) throws BadLocationException {
-			int start = document.getLength();
-			document.insertString(start, item.text(), item.style());
-			return start;
+		private void removeTemporaryLine() {
+			try {
+				document.remove(document.getLength() - temporaryLineLength, temporaryLineLength);
+			} catch (BadLocationException e) {
+				// ignore
+			}
+			temporaryLineLength = 0;
 		}
 
-		private static class Marking {
-
-			private Position position = null;
-			private int length = 0;
-
-			public void markText(StyledDocument document, int start, int length)
-				throws BadLocationException
-			{
-				position = document.createPosition(start);
-				this.length = length;
-			}
-
-			public void removeText(StyledDocument document)
-				throws BadLocationException
-			{
-				if (position == null) return;
-				document.remove(position.getOffset(), length);
-				position = null;
-			}
+		private String getLineText() {
+			StringBuilder s = new StringBuilder();
+			for(Item item : line)
+				s.append(item.text());
+			return s.toString();
 		}
 
+		private void addLine() {
+			for(Item item : line)
+				addText(item);
+		}
+
+		private void addText(Item item) {
+			try {
+				document.insertString(document.getLength(), item.text(), item.style());
+			} catch (BadLocationException e) {
+				// ignore
+			}
+		}
 	}
 }

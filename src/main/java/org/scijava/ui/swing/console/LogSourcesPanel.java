@@ -304,9 +304,9 @@ class LogSourcesPanel extends JPanel {
 		LogSourcesPanel logLevelPanel = new LogSourcesPanel(new JButton("dummy"));
 		LogSource root = LogSource.newRoot();
 		Set<LogSource> loggers = new HashSet<>(Arrays.asList(
-				root.subSourceFromString("Hello:World"),
-				root.subSourceFromString("Hello:Universe"),
-				root.subSourceFromString("Hello:foo:bar")));
+				root.subSource("Hello:World"),
+				root.subSource("Hello:Universe"),
+				root.subSource("Hello:foo:bar")));
 		logLevelPanel.updateSources(loggers);
 		frame.getContentPane().add(logLevelPanel, BorderLayout.CENTER);
 		frame.pack();

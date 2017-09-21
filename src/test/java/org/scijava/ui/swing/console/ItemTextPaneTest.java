@@ -37,8 +37,8 @@ import javax.swing.text.BadLocationException;
 import javax.swing.text.Document;
 import javax.swing.text.SimpleAttributeSet;
 
-import java.awt.*;
 import java.util.Arrays;
+import java.util.Iterator;
 import java.util.List;
 
 import static org.junit.Assert.*;
@@ -50,25 +50,70 @@ import static org.junit.Assert.*;
  */
 public class ItemTextPaneTest {
 
-	private Object tag = new Object();
-	private Object tag2 = new Object();
 	private AttributeSet style = new SimpleAttributeSet();
+
 	private List<ItemTextPane.Item> list = Arrays.asList(
-			new ItemTextPane.Item(style, "XYZ\n", null, true),
-			new ItemTextPane.Item(style, "Hello", tag, false),
-			new ItemTextPane.Item(style, "Hello2", tag2, false),
-			new ItemTextPane.Item(style, "Foo Bar\n", null, true),
-			new ItemTextPane.Item(style, "Hello World!\n", tag, true),
-			new ItemTextPane.Item(style, "Hello2 World!\n", tag2, true)
+			new ItemTextPane.Item(style, "XYZ\n"),
+			new ItemTextPane.Item(style, "Foo "),
+			new ItemTextPane.Item(style, "Bar"),
+			new ItemTextPane.Item(style, "\n"),
+			new ItemTextPane.Item(style, "Hello ")
 			);
-	private String expected = "XYZ\nFoo Bar\nHello World!\nHello2 World!\n";
+
+	private List<ItemTextPane.Item> list2 = Arrays.asList(
+			new ItemTextPane.Item(style, "World"),
+			new ItemTextPane.Item(style, "!")
+	);
 
 	@Test
-	public void testIncompleteLineReplacement() throws BadLocationException {
+	public void testCombiningItems() throws BadLocationException {
 		ItemTextPane.DocumentCalculator calculator = new ItemTextPane.DocumentCalculator(list.iterator());
 		calculator.update();
 		Document doc = calculator.document();
-		assertEquals(expected, doc.getText(0, doc.getLength()));
+		assertEquals("XYZ\nFoo Bar\nHello ", doc.getText(0, doc.getLength()));
 	}
 
+	@Test
+	public void testLastLineUpdate() throws BadLocationException {
+		ForwardingIterator<ItemTextPane.Item> iterator = new ForwardingIterator<>();
+		ItemTextPane.DocumentCalculator calculator = new ItemTextPane.DocumentCalculator(iterator);
+		iterator.set(list.iterator());
+		calculator.update();
+		iterator.set(list2.iterator());
+		calculator.update();
+		Document doc = calculator.document();
+		assertEquals("XYZ\nFoo Bar\nHello World!", doc.getText(0, doc.getLength()));
+	}
+
+	@Test
+	public void testFiltering() throws BadLocationException {
+		ForwardingIterator<ItemTextPane.Item> iterator = new ForwardingIterator<>();
+		ItemTextPane.DocumentCalculator calculator = new ItemTextPane.DocumentCalculator(iterator);
+		calculator.setFilter(text -> text.contains("Hello World!") || text.contains("X"));
+		iterator.set(list.iterator());
+		calculator.update();
+		iterator.set(list2.iterator());
+		calculator.update();
+		Document doc = calculator.document();
+		assertEquals("XYZ\nHello " + "World!", doc.getText(0, doc.getLength()));
+	}
+
+	private static class ForwardingIterator<T> implements Iterator<T> {
+
+		Iterator<T> iterator;
+
+		public void set(Iterator<T> iterator) {
+			this.iterator = iterator;
+		}
+
+		@Override
+		public boolean hasNext() {
+			return iterator.hasNext();
+		}
+
+		@Override
+		public T next() {
+			return iterator.next();
+		}
+	}
 }

@@ -125,7 +125,7 @@ public class SwingConsolePane extends AbstractConsolePane<JPanel> {
 	private synchronized void initLoggingPanel() {
 		if (loggingPanel != null) return;
 		loggingPanel = new LoggingPanel(threadService);
-		logService.addListener(loggingPanel);
+		logService.addLogListener(loggingPanel);
 		component = new JPanel(new MigLayout("", "[grow]", "[grow]"));
 		component.add(loggingPanel, "grow");
 	}
