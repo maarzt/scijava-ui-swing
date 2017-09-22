@@ -2,22 +2,36 @@ package org.scijava.ui.swing.console;
 
 import java.util.Iterator;
 import java.util.Map;
+import java.util.NavigableMap;
 import java.util.NoSuchElementException;
 import java.util.Spliterator;
 import java.util.Spliterators;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
 
 /**
+ * This Container manages a list of items. Items can only be added to end of
+ * the list. It's possible to add items, while iterating over the list.
+ * Iterators never fail, and they will always be updated. Even if an element
+ * is added after an iterator reached the end of the list,
+ * {@link Iterator#hasNext()} will return true again, and
+ * {@link Iterator#next()} will return the newly added element. This Container
+ * is fully thread safe.
+ *
  * @author Matthias Arzt
  */
+// TODO merge into AbstractRecorder
 public class Container<T> implements Iterable<T> {
 
 	private final AtomicLong lastKey = new AtomicLong(0);
 
-	private final Map<Long, T> map = new ConcurrentHashMap<>();
+	private final NavigableMap<Long, T> map =
+			new ConcurrentSkipListMap<>();
+
+	private final Object lock = new Object();
 
 	public Stream<T> stream() {
 		Spliterator<T> spliterator = Spliterators.spliteratorUnknownSize(
@@ -30,13 +44,19 @@ public class Container<T> implements Iterable<T> {
 	}
 
 	public Iterator<T> iteratorAtEnd() {
-		return new MyIterator(lastKey.get());
+		return new MyIterator(map.lastEntry());
 	}
 
-	public long add(T value) {
-		long key = lastKey.getAndIncrement();
-		map.put(key, value);
-		return key;
+	long add(T value) {
+		synchronized (lock) {
+			long key = lastKey.incrementAndGet();
+			map.put(key, value);
+			return key;
+		}
+	}
+
+	public void remove(long key) {
+		map.remove(key);
 	}
 
 	public void clear() {
@@ -45,29 +65,32 @@ public class Container<T> implements Iterable<T> {
 
 	private class MyIterator implements Iterator<T> {
 
-		private long nextIndex = 0;
+		private Map.Entry<Long, T> entry;
+
+		private Map.Entry<Long, T> nextEntry = null;
 
 		public MyIterator() {
-			this(0);
+			this(null);
 		}
 
-		public MyIterator(long nextIndex) {
-			this.nextIndex = nextIndex;
+		public MyIterator(Map.Entry<Long, T> entry) {
+			this.entry = entry;
 		}
 
 		@Override
 		public boolean hasNext() {
-			return map.containsKey(nextIndex);
+			nextEntry = (entry == null) ? map.firstEntry() : map.higherEntry(entry
+					.getKey());
+			return nextEntry != null;
 		}
 
 		@Override
 		public T next() {
-			T value = map.get(nextIndex);
-			if(value == null)
+			if (nextEntry == null) if (!hasNext())
 				throw new NoSuchElementException();
-			nextIndex++;
-			return value;
+			entry = nextEntry;
+			nextEntry = null;
+			return entry.getValue();
 		}
 	}
-
 }

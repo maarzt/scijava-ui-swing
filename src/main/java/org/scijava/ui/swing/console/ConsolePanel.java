@@ -121,17 +121,12 @@ public class ConsolePanel extends JPanel implements OutputListener
 	}
 
 	public void clear() {
-		// TODO
+		recorder.clear();
 		updateFilter();
 	}
 
-	public PrintStream printStream(String tag) {
-		// TODO
-		return null;
-	}
-
-	public void setPrintStreamStyle(String tag, AttributeSet style) {
-		// TODO
+	public PrintStream printStream(AttributeSet style) {
+		return recorder.printStream(new SimpleAttributeSet(style));
 	}
 
 	// -- OutputListener methods --
@@ -209,24 +204,8 @@ public class ConsolePanel extends JPanel implements OutputListener
 	private void updateFilter() {
 		final Predicate<String> quickSearchFilter = textFilter.getFilter();
 		Stream<ItemTextPane.Item> stream =
-			recorder.stream().filter(Objects::nonNull);
+			recorder.stream().filter(item -> quickSearchFilter.test(item.text()));
 		textArea.setData(stream.iterator());
-	}
-
-	private ItemTextPane.Item wrapToItem(String o) {
-		throw new IllegalStateException();
-	}
-
-	private static MutableAttributeSet normal(Color color) {
-		MutableAttributeSet style = new SimpleAttributeSet();
-		StyleConstants.setForeground(style, color);
-		return style;
-	}
-
-	private static MutableAttributeSet italic(Color color) {
-		MutableAttributeSet style = normal(color);
-		StyleConstants.setItalic(style, true);
-		return style;
 	}
 
 	// -- Helper methods - testing --

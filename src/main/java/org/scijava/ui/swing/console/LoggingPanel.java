@@ -32,9 +32,7 @@ package org.scijava.ui.swing.console;
 
 import java.awt.*;
 import java.awt.event.ActionEvent;
-import java.io.PrintStream;
 import java.util.Collections;
-import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -52,7 +50,6 @@ import javax.swing.text.StyleConstants;
 import net.miginfocom.swing.MigLayout;
 
 import org.scijava.Context;
-import org.scijava.console.OutputEvent;
 import org.scijava.console.OutputListener;
 import org.scijava.log.IgnoreAsCallingClass;
 import org.scijava.log.LogLevel;
@@ -78,8 +75,7 @@ import org.scijava.thread.ThreadService;
  * @author Matthias Arzt
  */
 @IgnoreAsCallingClass
-public class LoggingPanel extends JPanel implements LogListener,
-	OutputListener
+public class LoggingPanel extends JPanel implements LogListener
 {
 
 	private static final AttributeSet STYLE_ERROR = normal(new Color(200, 0, 0));
@@ -102,8 +98,6 @@ public class LoggingPanel extends JPanel implements LogListener,
 	private final Set<LogSource> sources = Collections.newSetFromMap(
 		new ConcurrentHashMap<>());
 	private final DefaultLogFormatter logFormatter = new DefaultLogFormatter();
-	private final Map<String, AttributeSet> streamStyles =
-		new ConcurrentHashMap<>();
 
 	private LogRecorder recorder;
 
@@ -155,22 +149,6 @@ public class LoggingPanel extends JPanel implements LogListener,
 	public void clear() {
 		recorder.clear();
 		updateFilter();
-	}
-
-	public PrintStream printStream(String tag) {
-		// TODO
-		return null;
-	}
-
-	public void setPrintStreamStyle(String tag, AttributeSet style) {
-		// TODO
-	}
-
-	// -- OutputListener methods --
-
-	@Override
-	public void outputOccurred(OutputEvent event) {
-		// TODO
 	}
 
 	// -- LogListener methods --
@@ -305,29 +283,16 @@ public class LoggingPanel extends JPanel implements LogListener,
 	private void updateFilter() {
 		final Predicate<String> quickSearchFilter = textFilter.getFilter();
 		final Predicate<LogMessage> logLevelFilter = sourcesPanel.getFilter();
-		Function<Object, ItemTextPane.Item> filter = object -> {
-			if (object instanceof LogMessage) {
-				LogMessage logMessage = (LogMessage) object;
-				if (!logLevelFilter.test(logMessage)) return null;
-			}
-			ItemTextPane.Item item = wrapToItem(object);
+		DefaultLogFormatter logFormatter = this.logFormatter;
+		Function<LogMessage, ItemTextPane.Item> filter = logMessage -> {
+			if (!logLevelFilter.test(logMessage)) return null;
+			ItemTextPane.Item item = new ItemTextPane.Item(getLevelStyle(logMessage.level()),
+					logFormatter.format(logMessage), null, true);
 			if (!quickSearchFilter.test(item.text())) return null;
 			return item;
 		};
-		Stream<ItemTextPane.Item> stream =
-			recorder.stream().map(filter).filter(Objects::nonNull);
+		Stream<ItemTextPane.Item> stream = recorder.stream().map(filter).filter(Objects::nonNull);
 		textArea.setData(stream.iterator());
-	}
-
-	private ItemTextPane.Item wrapToItem(Object o) {
-		if (o instanceof LogMessage)
-			return wrapLogMessage((LogMessage) o);
-		throw new IllegalStateException();
-	}
-
-	private ItemTextPane.Item wrapLogMessage(LogMessage message) {
-		return new ItemTextPane.Item(getLevelStyle(message.level()),
-			logFormatter.format(message));
 	}
 
 	private static AttributeSet getLevelStyle(int i) {
@@ -350,12 +315,6 @@ public class LoggingPanel extends JPanel implements LogListener,
 	private static MutableAttributeSet normal(Color color) {
 		MutableAttributeSet style = new SimpleAttributeSet();
 		StyleConstants.setForeground(style, color);
-		return style;
-	}
-
-	private static MutableAttributeSet italic(Color color) {
-		MutableAttributeSet style = normal(color);
-		StyleConstants.setItalic(style, true);
 		return style;
 	}
 
