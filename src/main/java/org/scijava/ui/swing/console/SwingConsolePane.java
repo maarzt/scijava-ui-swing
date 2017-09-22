@@ -32,8 +32,7 @@ package org.scijava.ui.swing.console;
 
 import java.awt.Component;
 
-import javax.swing.JPanel;
-import javax.swing.JTextPane;
+import javax.swing.*;
 
 import net.miginfocom.swing.MigLayout;
 
@@ -59,6 +58,8 @@ public class SwingConsolePane extends AbstractConsolePane<JPanel> {
 	private LogService logService;
 
 	private LoggingPanel loggingPanel;
+
+	private ConsolePanel consolePanel;
 
 	/**
 	 * The console pane's containing window; e.g., a {@link javax.swing.JFrame} or
@@ -87,7 +88,7 @@ public class SwingConsolePane extends AbstractConsolePane<JPanel> {
 
 	@Override
 	public void append(final OutputEvent event) {
-		loggingPanel().outputOccurred(event);
+		consolePanel().outputOccurred(event);
 	}
 
 	@Override
@@ -122,12 +123,21 @@ public class SwingConsolePane extends AbstractConsolePane<JPanel> {
 		return loggingPanel;
 	}
 
+	private ConsolePanel consolePanel() {
+		if (loggingPanel == null) initLoggingPanel();
+		return consolePanel;
+	}
+
 	private synchronized void initLoggingPanel() {
 		if (loggingPanel != null) return;
 		loggingPanel = new LoggingPanel(threadService);
 		logService.addLogListener(loggingPanel);
+		consolePanel = new ConsolePanel(threadService);
 		component = new JPanel(new MigLayout("", "[grow]", "[grow]"));
-		component.add(loggingPanel, "grow");
+		JTabbedPane tabs = new JTabbedPane();
+		tabs.addTab("Console", consolePanel);
+		tabs.addTab("Logs", loggingPanel);
+		component.add(tabs, "grow");
 	}
 
 	// -- Helper methods - testing --

@@ -54,15 +54,11 @@ public class Main {
 	}
 
 	public static void main(String... args) throws InterruptedException {
-		Context context = new Context(ThreadService.class, ConsoleService.class);
-		ConsolePanel panel = new ConsolePanel(context);
-		JFrame frame = showFrame(panel);
-		ConsoleService consoleService = context.service(ConsoleService.class);
-		consoleService.addOutputListener(panel);
-		while (frame.isVisible()) {
-			System.out.println("Hello World");
-			Thread.sleep(500);
-		}
+		main4();
+	}
+
+	private static void main4() throws InterruptedException {
+		main2();
 	}
 
 	@Plugin(type = Command.class, menuPath = "Log>Plugin that logs")

@@ -78,139 +78,36 @@ import org.scijava.thread.ThreadService;
  * @author Matthias Arzt
  */
 @IgnoreAsCallingClass
-public class ConsolePanel extends JPanel implements OutputListener
+public class ConsolePanel extends AbstractConsolePanel<ItemTextPane.Item, ConsoleRecorder> implements OutputListener
 {
-
-	private final TextFilterField textFilter =
-		new TextFilterField(" Text Search (Alt-F)");
-	private final ItemTextPane textArea;
-
-	private final JPanel textFilterPanel = new JPanel();
-
-	private final Map<String, AttributeSet> streamStyles =
-		new ConcurrentHashMap<>();
-
-	private ConsoleRecorder recorder = new ConsoleRecorder();
-
-	// -- constructor --
-
 	public ConsolePanel(Context context) {
 		this(context.getService(ThreadService.class));
 	}
 
 	public ConsolePanel(ThreadService threadService) {
-		textArea = new ItemTextPane(threadService);
+		super(threadService, new ConsoleRecorder());
 		initGui();
-		recorder.addObservers(textArea::update);
-		updateFilter();
+		setFilter(item -> item);
 	}
 
-	// --- LoggingPanel methods --
-
-
-	public void setTextFilterVisible(boolean visible) {
-		textFilterPanel.setVisible(visible);
-	}
-
-	public void copySelectionToClipboard() {
-		textArea.copySelectionToClipboard();
-	}
-
-	public void focusTextFilter() {
-		textFilter.getComponent().requestFocus();
-	}
-
-	public void clear() {
-		recorder.clear();
-		updateFilter();
-	}
+	// --- ConsolePanel methods --
 
 	public PrintStream printStream(AttributeSet style) {
-		return recorder.printStream(new SimpleAttributeSet(style));
+		return getRecorder().printStream(new SimpleAttributeSet(style));
 	}
 
 	// -- OutputListener methods --
 
 	@Override
 	public void outputOccurred(OutputEvent event) {
-		recorder.outputOccurred(event);
+		getRecorder().outputOccurred(event);
 	}
 
 	// -- Helper methods --
 
 	private void initGui() {
-		textFilter.setChangeListener(this::updateFilter);
-
-		JPopupMenu menu = initMenu();
-
-		JButton menuButton = new BasicArrowButton(BasicArrowButton.SOUTH);
-		menuButton.addActionListener(a ->
-			menu.show(menuButton, 0, menuButton.getHeight()));
-
-		textFilterPanel.setLayout(new MigLayout("insets 0", "[][grow]", "[]"));
-		textFilterPanel.add(menuButton);
-		textFilterPanel.add(textFilter.getComponent(), "grow");
-
-		textArea.setPopupMenu(menu);
-		textArea.getJComponent().setPreferredSize(new Dimension(200, 100));
-
 		this.setLayout(new MigLayout("insets 0", "[grow]", "[][grow]"));
-		this.add(textFilterPanel, "grow, wrap");
-		this.add(textArea.getJComponent(), "grow");
-
-		registerKeyStroke("alt F", "focusTextFilter", this::focusTextFilter);
-	}
-
-	private void registerKeyStroke(String keyStroke, String id, final Runnable action) {
-		getInputMap(JComponent.WHEN_ANCESTOR_OF_FOCUSED_COMPONENT).put(KeyStroke
-			.getKeyStroke(keyStroke), id);
-		getActionMap().put(id, new AbstractAction() {
-
-			@Override
-			public void actionPerformed(ActionEvent actionEvent) {
-				action.run();
-			}
-		});
-	}
-
-	private JPopupMenu initMenu() {
-		JPopupMenu menu = new JPopupMenu();
-		menu.add(newMenuItem("Copy", "control C",
-			this::copySelectionToClipboard));
-		registerKeyStroke("control C", "copyToClipBoard",
-			this::copySelectionToClipboard);
-		menu.add(newMenuItem("Clear", "alt C",
-			this::clear));
-		registerKeyStroke("alt C", "clearConsolePanel",
-			this::clear);
-		menu.add(newMenuItem("update", this::updateFilter));
-		return menu;
-	}
-
-	static private JMenuItem newMenuItem(String text, String keyStroke,
-		Runnable runnable)
-	{
-		JMenuItem item = newMenuItem(text, runnable);
-		item.setAccelerator(KeyStroke.getKeyStroke(keyStroke));
-		return item;
-	}
-
-	static private JMenuItem newMenuItem(String text, Runnable runnable) {
-		JMenuItem item = new JMenuItem(text);
-		item.addActionListener(actionEvent -> runnable.run());
-		return item;
-	}
-
-	private void updateFilter() {
-		final Predicate<String> quickSearchFilter = textFilter.getFilter();
-		Stream<ItemTextPane.Item> stream =
-			recorder.stream().filter(item -> quickSearchFilter.test(item.text()));
-		textArea.setData(stream.iterator());
-	}
-
-	// -- Helper methods - testing --
-
-	JTextPane getTextPane() {
-		return textArea.getTextPane();
+		this.add(topPanel(), "grow, wrap");
+		this.add(mainArea(), "grow");
 	}
 }

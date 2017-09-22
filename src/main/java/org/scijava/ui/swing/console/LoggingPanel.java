@@ -31,17 +31,13 @@
 package org.scijava.ui.swing.console;
 
 import java.awt.*;
-import java.awt.event.ActionEvent;
 import java.util.Collections;
-import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
 import java.util.function.Predicate;
-import java.util.stream.Stream;
 
 import javax.swing.*;
-import javax.swing.plaf.basic.BasicArrowButton;
 import javax.swing.text.AttributeSet;
 import javax.swing.text.MutableAttributeSet;
 import javax.swing.text.SimpleAttributeSet;
@@ -55,7 +51,6 @@ import org.scijava.log.IgnoreAsCallingClass;
 import org.scijava.log.LogLevel;
 import org.scijava.log.LogListener;
 import org.scijava.log.LogMessage;
-import org.scijava.log.LogRecorder;
 import org.scijava.log.LogService;
 import org.scijava.log.LogSource;
 import org.scijava.log.Logger;
@@ -75,7 +70,7 @@ import org.scijava.thread.ThreadService;
  * @author Matthias Arzt
  */
 @IgnoreAsCallingClass
-public class LoggingPanel extends JPanel implements LogListener
+public class LoggingPanel extends AbstractConsolePanel<LogMessage, LogRecorder> implements LogListener
 {
 
 	private static final AttributeSet STYLE_ERROR = normal(new Color(200, 0, 0));
@@ -85,21 +80,14 @@ public class LoggingPanel extends JPanel implements LogListener
 	private static final AttributeSet STYLE_TRACE = normal(Color.GRAY);
 	private static final AttributeSet STYLE_OTHERS = normal(Color.GRAY);
 
-	private final TextFilterField textFilter =
-		new TextFilterField(" Text Search (Alt-F)");
 	private final LogSourcesPanel sourcesPanel = initSourcesPanel();
 
-	private final ItemTextPane textArea;
-
-	private final JPanel textFilterPanel = new JPanel();
 	private final JSplitPane splitPane =
 		new JSplitPane(JSplitPane.HORIZONTAL_SPLIT);
 
 	private final Set<LogSource> sources = Collections.newSetFromMap(
 		new ConcurrentHashMap<>());
 	private final DefaultLogFormatter logFormatter = new DefaultLogFormatter();
-
-	private LogRecorder recorder;
 
 	// -- constructor --
 
@@ -108,19 +96,12 @@ public class LoggingPanel extends JPanel implements LogListener
 	}
 
 	public LoggingPanel(ThreadService threadService) {
-		textArea = new ItemTextPane(threadService);
+		super(threadService, new LogRecorder());
 		initGui();
-		setRecorder(new LogRecorder());
+		updateFilter();
 	}
 
 	// --- LoggingPanel methods --
-
-	public void setRecorder(LogRecorder recorder) {
-		if (recorder != null) recorder.removeObserver(textArea::update);
-		this.recorder = recorder;
-		updateFilter();
-		recorder.addObservers(textArea::update);
-	}
 
 	public void toggleSourcesPanel() {
 		boolean visible = !sourcesPanel.isVisible();
@@ -134,64 +115,32 @@ public class LoggingPanel extends JPanel implements LogListener
 		splitPane.setDividerSize(visible ? 5 : 0);
 	}
 
-	public void setTextFilterVisible(boolean visible) {
-		textFilterPanel.setVisible(visible);
-	}
-
-	public void copySelectionToClipboard() {
-		textArea.copySelectionToClipboard();
-	}
-
-	public void focusTextFilter() {
-		textFilter.getComponent().requestFocus();
-	}
-
-	public void clear() {
-		recorder.clear();
-		updateFilter();
-	}
-
 	// -- LogListener methods --
 
 	@Override
 	public void messageLogged(LogMessage message) {
 		sources.add(message.source());
-		recorder.messageLogged(message);
+		getRecorder().messageLogged(message);
 	}
 
 	// -- Helper methods --
 
 	private void initGui() {
-		textFilter.setChangeListener(this::updateFilter);
-
-		JPopupMenu menu = initMenu();
-
-		JButton menuButton = new BasicArrowButton(BasicArrowButton.SOUTH);
-		menuButton.addActionListener(a ->
-			menu.show(menuButton, 0, menuButton.getHeight()));
-
-		textFilterPanel.setLayout(new MigLayout("insets 0", "[][grow]", "[]"));
-		textFilterPanel.add(menuButton);
-		textFilterPanel.add(textFilter.getComponent(), "grow");
+		initMenu();
 
 		sourcesPanel.setChangeListener(this::updateFilter);
 		sourcesPanel.setVisible(false);
 
-		textArea.setPopupMenu(menu);
-		textArea.getJComponent().setPreferredSize(new Dimension(200, 100));
-
 		splitPane.setBorder(BorderFactory.createEmptyBorder(1, 1, 1, 1));
 		splitPane.setResizeWeight(0.15);
 		splitPane.add(sourcesPanel);
-		splitPane.add(textArea.getJComponent());
+		splitPane.add(mainArea());
 		splitPane.setDividerSize(0);
 		splitPane.resetToPreferredSizes();
 
 		this.setLayout(new MigLayout("insets 0", "[grow]", "[][grow]"));
-		this.add(textFilterPanel, "grow, wrap");
+		this.add(topPanel(), "grow, wrap");
 		this.add(splitPane, "grow");
-
-		registerKeyStroke("alt F", "focusTextFilter", this::focusTextFilter);
 	}
 
 	private LogSourcesPanel initSourcesPanel() {
@@ -204,33 +153,11 @@ public class LoggingPanel extends JPanel implements LogListener
 		sourcesPanel.updateSources(sources);
 	}
 
-	private void registerKeyStroke(String keyStroke, String id, final Runnable action) {
-		getInputMap(JComponent.WHEN_ANCESTOR_OF_FOCUSED_COMPONENT).put(KeyStroke
-			.getKeyStroke(keyStroke), id);
-		getActionMap().put(id, new AbstractAction() {
-
-			@Override
-			public void actionPerformed(ActionEvent actionEvent) {
-				action.run();
-			}
-		});
-	}
-
-	private JPopupMenu initMenu() {
-		JPopupMenu menu = new JPopupMenu();
-		menu.add(newMenuItem("Copy", "control C",
-			this::copySelectionToClipboard));
-		registerKeyStroke("control C", "copyToClipBoard",
-			this::copySelectionToClipboard);
-		menu.add(newMenuItem("Clear", "alt C",
-			this::clear));
-		registerKeyStroke("alt C", "clearLoggingPanel",
-			this::clear);
-		menu.add(newMenuItem("Log Sources",
-			this::toggleSourcesPanel));
+	private void initMenu() {
+		JPopupMenu menu = popupMenu();
+		menu.add(newMenuItem("Log Sources", this::toggleSourcesPanel));
 		menu.add(newMenuItem("update", this::updateFilter));
 		menu.add(initSettingsMenu());
-		return menu;
 	}
 
 	private JMenu initSettingsMenu() {
@@ -251,9 +178,9 @@ public class LoggingPanel extends JPanel implements LogListener
 	}
 
 	private void recordCallingClassSetter() {
-		if (recorder != null) {
-			boolean enable = !recorder.isRecordCallingClass();
-			recorder.setRecordCallingClass(enable);
+		if (getRecorder() != null) {
+			boolean enable = !getRecorder().isRecordCallingClass();
+			getRecorder().setRecordCallingClass(enable);
 			if (enable)
 				logFormatter.setVisible(DefaultLogFormatter.Field.ATTACHMENT, true);
 		}
@@ -266,33 +193,15 @@ public class LoggingPanel extends JPanel implements LogListener
 		};
 	}
 
-	static private JMenuItem newMenuItem(String text, String keyStroke,
-		Runnable runnable)
-	{
-		JMenuItem item = newMenuItem(text, runnable);
-		item.setAccelerator(KeyStroke.getKeyStroke(keyStroke));
-		return item;
-	}
-
-	static private JMenuItem newMenuItem(String text, Runnable runnable) {
-		JMenuItem item = new JMenuItem(text);
-		item.addActionListener(actionEvent -> runnable.run());
-		return item;
-	}
-
 	private void updateFilter() {
-		final Predicate<String> quickSearchFilter = textFilter.getFilter();
 		final Predicate<LogMessage> logLevelFilter = sourcesPanel.getFilter();
-		DefaultLogFormatter logFormatter = this.logFormatter;
 		Function<LogMessage, ItemTextPane.Item> filter = logMessage -> {
 			if (!logLevelFilter.test(logMessage)) return null;
 			ItemTextPane.Item item = new ItemTextPane.Item(getLevelStyle(logMessage.level()),
 					logFormatter.format(logMessage), null, true);
-			if (!quickSearchFilter.test(item.text())) return null;
 			return item;
 		};
-		Stream<ItemTextPane.Item> stream = recorder.stream().map(filter).filter(Objects::nonNull);
-		textArea.setData(stream.iterator());
+		setFilter(filter);
 	}
 
 	private static AttributeSet getLevelStyle(int i) {
@@ -316,11 +225,5 @@ public class LoggingPanel extends JPanel implements LogListener
 		MutableAttributeSet style = new SimpleAttributeSet();
 		StyleConstants.setForeground(style, color);
 		return style;
-	}
-
-	// -- Helper methods - testing --
-
-	JTextPane getTextPane() {
-		return textArea.getTextPane();
 	}
 }
